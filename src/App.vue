@@ -1,6 +1,6 @@
 <template>
   <div class="app-container">
-    <van-nav-bar title="IELTS-WORDS" style="background-color: #f7f8fa;" />
+    <van-nav-bar title="IELTS READING-WOEDS" style="background-color: #f7f8fa;" />
 
     <!-- 第一页：控制台 -->
     <div class="control-panel" v-if="!isPracticing">
@@ -11,7 +11,7 @@
           <van-button icon="description" type="primary" plain block>上传自制词书 (CSV格式)</van-button>
         </van-uploader>
         
-        <!-- 新增：手动添加单词按钮 -->
+        <!-- 手动添加单词按钮 -->
         <van-button icon="plus" type="primary" plain block style="margin-top: 15px;" @click="showAddDialog = true">
           手动录入单个单词
         </van-button>
@@ -57,15 +57,17 @@
           >
             <!-- 始终显示英文选项 -->
             <span class="option-text">{{ optionObj.text }}</span>
-            <!-- 答题后显示对应的中文意思 -->
-            <span v-if="hasAnswered" class="option-meaning">{{ optionObj.meaning || '' }}</span>
+            <!-- 答题后，所有选项都会显示出对应的中文意思 -->
+            <span v-if="hasAnswered" class="option-meaning">
+              {{ optionObj.meaning }}
+            </span>
           </van-button>
         </div>
       </van-cell-group>
 
       <div v-if="hasAnswered" class="action-area">
         <van-notice-bar 
-          :text="isCorrect ? '回答正确！🎉' : '回答错误。正确近义词是: ' + currentQuestion.synonym" 
+          :text="isCorrect ? '回答正确！🎉' : '回答错误。正确选项是: ' + (currentQuestion.synonym || currentQuestion.word)" 
           :color="isCorrect ? '#07c160' : '#ee0a24'"
           :background="isCorrect ? '#e8fbec' : '#ffe1e1'"
           style="margin-bottom: 20px; border-radius: 8px;"
@@ -76,7 +78,7 @@
       </div>
     </div>
 
-    <!-- 新增：手动添加单词的弹窗 -->
+    <!-- 手动添加单词的弹窗 -->
     <van-dialog 
       v-model:show="showAddDialog" 
       title="录入新单词" 
@@ -86,7 +88,7 @@
       <van-cell-group inset style="margin: 15px 0;">
         <van-field v-model="newWordForm.word" label="单词" placeholder="例: resemble" />
         <van-field v-model="newWordForm.meaning" label="意思" placeholder="例: v.像，与……相似" />
-        <van-field v-model="newWordForm.synonym" label="近义词" placeholder="多个用 | 或逗号隔开" />
+        <van-field v-model="newWordForm.synonym" label="近义词" placeholder="多个用 | 隔开" />
       </van-cell-group>
     </van-dialog>
 
@@ -110,7 +112,7 @@ const hasAnswered = ref(false)
 const selectedOption = ref(null)
 const isCorrect = ref(false)
 
-// 新增：控制弹窗和表单数据
+// 控制弹窗和表单数据
 const showAddDialog = ref(false)
 const newWordForm = ref({
   word: '',
@@ -126,7 +128,7 @@ const fetchWordsCount = async () => {
   }
 }
 
-// 新增：提交单个单词到数据库
+// 提交单个单词到数据库
 const submitSingleWord = async () => {
   if (!newWordForm.value.word || !newWordForm.value.meaning) {
     showToast('单词和意思不能为空哦！')
@@ -197,7 +199,7 @@ const shuffleArray = (array) => {
   return array;
 }
 
-// 修改：出题时同时保存选项的中文意思
+// 出题逻辑：抽取对象 { text: 'english', meaning: '中文' }
 const nextQuestion = () => {
   hasAnswered.value = false
   selectedOption.value = null
@@ -206,27 +208,23 @@ const nextQuestion = () => {
   const q = wordBank.value[randomIndex]
   currentQuestion.value = q
   
-  // 建立选项池，这里存放对象 { text: 'english', meaning: '中文' }
   let optionsPool = []
   
-  // 放入正确答案（如果有近义词的话）
-  if (q.synonym) {
-    // 因为正确近义词其实就是这道题单词的变体，可以共用原单词的意思
-    optionsPool.push({ text: q.synonym, meaning: q.meaning })
-  }
+  // 1. 放入正确答案（如果有近义词就用近义词，没有就用原词）
+  const correctText = q.synonym || q.word
+  optionsPool.push({ text: correctText, meaning: q.meaning })
 
-  // 找干扰项直到凑够4个选项
+  // 2. 放入干扰项，直到满4个选项
   while (optionsPool.length < 4) {
     const randomFallback = wordBank.value[Math.floor(Math.random() * wordBank.value.length)]
     
-    // 如果这个随机词有近义词就用它的近义词，没有就用它原本的词，附带上这个词的中文意思
-    const fakeText = randomFallback.synonym || randomFallback.word
+    // 提取干扰词及其中文意思
+    const fakeText =  randomFallback.synonym || randomFallback.word
     const fakeMeaning = randomFallback.meaning
     
-    // 确保没有抽到重复的文本
+    // 确保没有抽到重复的选项
     const isDuplicate = optionsPool.find(opt => opt.text === fakeText)
     
-    // 如果不是重复的，且不是空字符串，就加进选项池
     if (!isDuplicate && fakeText) {
       optionsPool.push({ text: fakeText, meaning: fakeMeaning })
     }
@@ -236,17 +234,20 @@ const nextQuestion = () => {
   speak(q.word)
 }
 
+// 选择逻辑
 const handleSelect = (optionText) => {
   selectedOption.value = optionText
   hasAnswered.value = true
-  isCorrect.value = (optionText === currentQuestion.value.synonym)
+  const correctText = currentQuestion.value.synonym || currentQuestion.value.word
+  isCorrect.value = (optionText === correctText)
   if (isCorrect.value) score.value++
   speak(optionText)
 }
 
 const getButtonType = (optionText) => {
   if (!hasAnswered.value) return 'default'
-  if (optionText === currentQuestion.value.synonym) return 'success'
+  const correctText = currentQuestion.value.synonym || currentQuestion.value.word
+  if (optionText === correctText) return 'success'
   if (optionText === selectedOption.value && !isCorrect.value) return 'danger'
   return 'default'
 }
@@ -295,25 +296,30 @@ onMounted(() => {
 .option-btn {
   border-radius: 8px;
   height: auto;
-  min-height: 48px;
-  padding: 10px;
+  min-height: 54px;
+  padding: 8px;
 }
-/* 新增：选项排版样式 */
+/* 选项排版样式 */
 .option-btn :deep(.van-button__text) {
   display: flex;
   flex-direction: column;
   align-items: center;
-  line-height: 1.2;
+  justify-content: center;
+  line-height: 1.4;
 }
 .option-text {
   font-size: 16px;
-  font-weight: bold;
+  font-weight: 500;
 }
 .option-meaning {
-  font-size: 12px;
-  color: inherit;
-  opacity: 0.8;
+  font-size: 13px;
+  color: #666;
   margin-top: 4px;
+}
+/* 选错时，选项按钮里中文的颜色加深一点以便看清 */
+.van-button--danger .option-meaning, .van-button--success .option-meaning {
+  color: #fff;
+  opacity: 0.9;
 }
 .action-area {
   margin-top: 24px;
