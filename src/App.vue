@@ -1,6 +1,12 @@
+没问题，拿好这份最完整、最完美的 V2.0（阅读 + 听力双模块）代码！
+
+请确保你这次打开的是左侧文件树 src 文件夹里面的那个 App.vue。
+全选里面的旧代码，删除，然后把下面这整段代码原封不动粘贴进去，并按下 Ctrl + S 保存：
+
+text
 <template>
   <div class="app-container">
-    <van-nav-bar :title="activeTab === 0 ? 'IELTS-ALL-NEEDED-WORDS'" style="background-color: #f7f8fa;" />
+    <van-nav-bar :title="activeTab === 0 ? '📖 雅思阅读特训' : '🎧 雅思听力默写'" style="background-color: #f7f8fa;" />
 
     <!-- ==================== 模块一：阅读特训 (Reading) ==================== -->
     <div v-show="activeTab === 0" style="padding-bottom: 60px;">
