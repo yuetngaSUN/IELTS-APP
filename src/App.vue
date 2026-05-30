@@ -1,6 +1,6 @@
 <template>
   <div class="app-container">
-    <van-nav-bar :title="activeTab === 0 ? 'IELTS-ALLWORDS'" style="background-color: #f7f8fa;" />
+    <van-nav-bar :title="activeTab === 0 ? '📖 雅思阅读特训' : '🎧 雅思听力默写'" style="background-color: #f7f8fa;" />
 
     <!-- ==================== 模块一：阅读特训 (Reading) ==================== -->
     <div v-show="activeTab === 0" style="padding-bottom: 60px;">
