@@ -2,33 +2,51 @@
   <div class="app-container">
     <van-nav-bar title="雅思云端特训" style="background-color: #f7f8fa;" />
 
-    <div class="control-panel" v-if="!isPracticing">
+    <!-- 主控面板 -->
+    <div class="control-panel" v-if="!isPracticing && !isListeningVocab && !isListeningIntensive">
       <van-notice-bar left-icon="info-o" :text="'当前云端词库共有 ' + totalWordsInDB + ' 个单词'" />
       
-      <div style="margin: 20px 16px;">
-        <van-uploader accept=".csv" :max-count="1" :after-read="handleFileUpload">
-          <van-button icon="plus" type="primary" plain block>上传自制词书 (CSV格式)</van-button>
+      <div class="global-actions">
+        <van-uploader accept=".csv" :max-count="1" :after-read="handleFileUpload" style="width: 100%;">
+          <van-button icon="plus" type="primary" plain block>批量上传词书 (CSV)</van-button>
         </van-uploader>
-        
-        <van-button 
-          type="success" block round style="margin-top: 20px;"
-          @click="startPractice('all')"
-          :disabled="totalWordsInDB === 0"
-        >
+        <van-button icon="edit" type="primary" plain block style="margin-top: 10px;" @click="showAddDialog = true">
+          手动添加单个生词
+        </van-button>
+      </div>
+
+      <div class="module-card">
+        <h3>📖 阅读：同义词替换</h3>
+        <van-button type="success" block round @click="startPractice('all')" :disabled="totalWordsInDB === 0">
           开始刷题！(全部)
         </van-button>
-
-        <van-button 
-          type="warning" block round style="margin-top: 15px;"
-          @click="startPractice('reading_wrong')"
-          :disabled="readingWrongCount === 0"
-        >
+        <van-button type="warning" block round style="margin-top: 15px;" @click="startPractice('reading_wrong')" :disabled="readingWrongCount === 0">
           复习阅读错题本 ({{ readingWrongCount }}个)
+        </van-button>
+      </div>
+
+      <div class="module-card">
+        <h3>🎧 听力：生词听写测试</h3>
+        <p class="module-desc">盲听单词拼写，男女声混合，做完生成汇总表</p>
+        <van-button type="primary" block round @click="startListeningVocab('all')" :disabled="totalWordsInDB === 0">
+          开始听写测试 (全部词库)
+        </van-button>
+        <van-button type="danger" plain block round style="margin-top: 15px;" @click="startListeningVocab('wrong')" :disabled="listeningWrongCount === 0">
+          攻克听力错题本 ({{ listeningWrongCount }}个)
+        </van-button>
+      </div>
+
+      <div class="module-card">
+        <h3>👂 听力：词汇精听</h3>
+        <p class="module-desc">随机男女声朗读，辅助记忆原词与释义</p>
+        <van-button color="#7232dd" block round @click="startListeningIntensive" :disabled="totalWordsInDB === 0">
+          进入精听模式
         </van-button>
       </div>
     </div>
 
-    <div class="content" v-else>
+    <!-- ==================== 视图区 1：原版阅读特训 ==================== -->
+    <div class="content" v-else-if="isPracticing">
       <div class="score-board">
         <span>当前得分: {{ score }}</span>
         <span style="color:#1989fa; cursor:pointer;" @click="isPracticing = false">退出练习</span>
@@ -38,18 +56,11 @@
         <div class="word-display">
           <h2>{{ currentQuestion.word }}</h2>
           <van-icon name="volume-o" size="24" @click="speak(currentQuestion.word)" style="color:#1989fa; margin-left: 10px;" />
-          
-          <!-- 【全局收藏星星】即使做对了也可以随时点击收藏 -->
-          <van-icon 
-            :name="currentQuestion.reading_wrong_count > 0 ? 'star' : 'star-o'" 
-            size="26" 
-            :color="currentQuestion.reading_wrong_count > 0 ? '#fadb14' : '#ccc'" 
-            style="margin-left: 15px; cursor: pointer;"
-            @click="toggleFav" 
-          />
+          <van-icon :name="currentQuestion.reading_wrong_count > 0 ? 'star' : 'star-o'" size="26" :color="currentQuestion.reading_wrong_count > 0 ? '#fadb14' : '#ccc'" style="margin-left: 15px; cursor: pointer;" @click="toggleFav('reading')" />
+          <van-icon name="edit" size="22" color="#7232dd" style="margin-left: 15px; cursor: pointer;" @click="openEditDialog" />
+          <van-icon name="delete-o" size="22" color="#ee0a24" style="margin-left: 10px; cursor: pointer;" @click="confirmDelete" />
         </div>
         
-        <!-- 【完美隐藏】没作答时不给任何提示，作答后直接显示原词意思 -->
         <p style="text-align: center; color: #999; margin: 0 0 10px 0; min-height: 20px;">
           <span v-if="hasAnswered">【原词释义】{{ currentQuestion.meaning }}</span>
         </p>
@@ -57,51 +68,148 @@
         <p style="text-align: center; color: #666; margin-bottom: 20px; font-weight: bold;">请选择与上面单词意思相近的词</p>
 
         <div class="options-list">
-          <van-button 
-            v-for="(option, index) in currentOptions" 
-            :key="index"
-            block 
-            class="option-btn"
-            :type="getButtonType(option)"
-            @click="handleSelect(option)"
-            :disabled="hasAnswered"
-          >
+          <van-button v-for="(option, index) in currentOptions" :key="index" block class="option-btn" :type="getButtonType(option)" @click="handleSelect(option)" :disabled="hasAnswered">
             <div style="display: flex; flex-direction: column; align-items: center; line-height: 1.4;">
               <span>{{ option }}</span>
-              <span v-if="hasAnswered" class="option-meaning">
-                {{ getOptionMeaning(option) }}
-              </span>
+              <span v-if="hasAnswered" class="option-meaning">{{ getOptionMeaning(option) }}</span>
             </div>
           </van-button>
         </div>
       </van-cell-group>
 
       <div v-if="hasAnswered" class="action-area">
-        <van-notice-bar 
-          :text="isCorrect ? '回答正确！🎉' : '回答错误。正确近义词是: ' + currentTargetSynonym" 
-          :color="isCorrect ? '#07c160' : '#ee0a24'"
-          :background="isCorrect ? '#e8fbec' : '#ffe1e1'"
-          style="margin-bottom: 20px; border-radius: 8px;"
-        />
-        <van-button type="primary" block round @click="nextQuestion">
-          下一题
-        </van-button>
+        <van-notice-bar :text="isCorrect ? '回答正确！🎉' : '回答错误。正确近义词是: ' + currentTargetSynonym" :color="isCorrect ? '#07c160' : '#ee0a24'" :background="isCorrect ? '#e8fbec' : '#ffe1e1'" style="margin-bottom: 15px; border-radius: 8px;" />
+        
+        <!-- 【纯添加】：作答后，展示该词完整的同义词库，方便一网打尽 -->
+        <p style="text-align: center; color: #7232dd; font-size: 14px; margin-bottom: 15px; font-weight: bold;" v-if="currentQuestion.synonym">
+          💡 该词的全部同义词: {{ currentQuestion.synonym }}
+        </p>
+
+        <van-button type="primary" block round @click="nextQuestion">下一题</van-button>
       </div>
     </div>
+
+    <!-- ==================== 视图区 2：听力生词听写 ==================== -->
+    <div class="content" v-else-if="isListeningVocab">
+      <div class="score-board">
+        <span>已测: {{ dictationCount }} 词</span>
+        <span style="color:#1989fa; cursor:pointer;" @click="finishDictation">结束并看汇总</span>
+      </div>
+
+      <van-cell-group inset class="question-card" v-if="currentQuestion">
+        <div class="word-display" style="justify-content: flex-end; margin-bottom: 10px;">
+          <van-icon name="edit" size="22" color="#7232dd" style="margin-right: 15px; cursor: pointer;" @click="openEditDialog" />
+          <van-icon name="delete-o" size="22" color="#ee0a24" style="cursor: pointer;" @click="confirmDelete" />
+        </div>
+
+        <div style="text-align: center; margin-bottom: 20px;">
+          <van-button icon="play-circle-o" type="primary" size="large" round @click="speakMixed(currentQuestion.word)">播放语音 (男女声混合)</van-button>
+        </div>
+
+        <van-field v-model="spellInput" placeholder="请根据发音拼写出该单词..." size="large" input-align="center" :disabled="hasAnswered" />
+
+        <div style="margin-top: 20px;" v-if="!hasAnswered">
+          <van-button type="success" block round @click="checkDictation">提交批改</van-button>
+        </div>
+
+        <div v-if="hasAnswered" style="margin-top: 20px;">
+          <van-notice-bar :text="isCorrect ? '拼写正确！🎉' : '拼写错误。正确拼写是: ' + currentQuestion.word" :color="isCorrect ? '#07c160' : '#ee0a24'" :background="isCorrect ? '#e8fbec' : '#ffe1e1'" style="margin-bottom: 15px; border-radius: 8px;" />
+          <p style="text-align: center; color: #666; margin-bottom: 10px;">释义: {{ currentQuestion.meaning }}</p>
+          
+          <!-- 【纯添加】：听写作答后，也展示同义词/变体 -->
+          <p style="text-align: center; color: #7232dd; font-size: 13px; margin-bottom: 15px;" v-if="currentQuestion.synonym">
+            💡 听写容错备用词: {{ currentQuestion.synonym }}
+          </p>
+
+          <van-button type="primary" block round @click="nextDictation">下一题</van-button>
+        </div>
+      </van-cell-group>
+    </div>
+
+    <!-- ==================== 视图区 3：听力精听 ==================== -->
+    <div class="content" v-else-if="isListeningIntensive">
+      <div class="score-board">
+        <span>精听模式</span>
+        <span style="color:#1989fa; cursor:pointer;" @click="isListeningIntensive = false">退出精听</span>
+      </div>
+
+      <van-cell-group inset class="question-card" v-if="currentQuestion">
+        <div class="word-display" style="flex-direction: column;">
+          <div style="width: 100%; display: flex; justify-content: flex-end; margin-bottom: 10px;">
+            <van-icon name="edit" size="22" color="#7232dd" style="margin-right: 15px; cursor: pointer;" @click="openEditDialog" />
+            <van-icon name="delete-o" size="22" color="#ee0a24" style="cursor: pointer;" @click="confirmDelete" />
+          </div>
+
+          <van-button icon="play-circle" type="primary" size="large" round @click="speakMixed(currentQuestion.word)" style="margin-bottom: 20px;">
+            听音频
+          </van-button>
+          
+          <div v-if="showIntensiveText" style="text-align: center;">
+            <h2 style="margin: 10px 0;">{{ currentQuestion.word }}</h2>
+            <p style="color: #666;">{{ currentQuestion.meaning }}</p>
+            <!-- 【纯添加】：精听模式显示单词时，一并显示同义词 -->
+            <p style="color: #7232dd; font-size: 14px;" v-if="currentQuestion.synonym">同义词: {{ currentQuestion.synonym }}</p>
+          </div>
+          
+          <div style="display: flex; gap: 10px; width: 100%; margin-top: 20px;">
+            <van-button type="warning" block plain @click="showIntensiveText = !showIntensiveText">
+              {{ showIntensiveText ? '隐藏单词' : '查看单词' }}
+            </van-button>
+            <van-button type="success" block @click="nextDictation(true)">下一首</van-button>
+          </div>
+        </div>
+      </van-cell-group>
+    </div>
+
+    <!-- 弹窗部分保持不变 -->
+    <van-dialog v-model:show="showAddDialog" title="手动添加生词" show-cancel-button @confirm="submitNewWord">
+      <van-field v-model="newWordForm.word" label="单词" placeholder="必填" required />
+      <van-field v-model="newWordForm.meaning" label="中文释义" placeholder="必填" required />
+      <van-field v-model="newWordForm.synonym" label="同义词" placeholder="多个用英文逗号分隔" />
+      <van-field v-model="newWordForm.category" label="分类" placeholder="如 reading 或 listening" />
+    </van-dialog>
+
+    <van-dialog v-model:show="showEditDialog" title="修改单词" show-cancel-button @confirm="submitEditWord">
+      <van-field v-model="editWordForm.word" label="单词" required />
+      <van-field v-model="editWordForm.meaning" label="中文释义" required />
+      <van-field v-model="editWordForm.synonym" label="同义词" placeholder="可填入复数/变体作容错，逗号分隔" />
+    </van-dialog>
+
+    <van-dialog v-model:show="showSummaryDialog" title="本次听写汇总" confirm-button-text="我知道了">
+      <div style="padding: 16px; max-height: 60vh; overflow-y: auto;">
+        <h4 style="color: #ee0a24; margin-top: 0;">❌ 拼错的生词 (自动加入听力错题本)</h4>
+        <div v-if="sessionWrongWords.length === 0" style="color:#999; font-size:14px;">太棒了，全对！</div>
+        <div v-for="(w, i) in sessionWrongWords" :key="'w'+i" style="margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 5px;">
+          <strong>{{ w.word }}</strong> <br>
+          <span style="font-size: 12px; color: #666;">释义: {{ w.meaning }}</span>
+        </div>
+        <h4 style="color: #07c160; margin-top: 20px;">✅ 拼对的单词</h4>
+        <div v-if="sessionRightWords.length === 0" style="color:#999; font-size:14px;">继续努力！</div>
+        <span v-for="(w, i) in sessionRightWords" :key="'r'+i" style="margin-right: 10px; color: #666;">
+          {{ w.word }}
+        </span>
+      </div>
+    </van-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted, computed } from 'vue'
-import { showToast, showLoadingToast, closeToast } from 'vant'
+import { showToast, showLoadingToast, closeToast, showConfirmDialog } from 'vant'
 import { supabase } from './supabase'
 import Papa from 'papaparse'
 
-const isPracticing = ref(false)
-const practiceMode = ref('all') 
 const totalWordsInDB = ref(0)
 const wordBank = ref([])
 
+const isPracticing = ref(false)
+const isListeningVocab = ref(false)
+const isListeningIntensive = ref(false)
+const showAddDialog = ref(false)
+const showSummaryDialog = ref(false)
+const showEditDialog = ref(false)
+
+const practiceMode = ref('all') 
 const score = ref(0)
 const currentQuestion = ref(null)
 const currentTargetSynonym = ref('') 
@@ -110,7 +218,23 @@ const hasAnswered = ref(false)
 const selectedOption = ref(null)
 const isCorrect = ref(false)
 
+const spellInput = ref('')
+const dictationCount = ref(0)
+const sessionWrongWords = ref([])
+const sessionRightWords = ref([])
+const showIntensiveText = ref(false)
+let currentListeningPool = []
+
+const newWordForm = ref({ word: '', meaning: '', synonym: '', category: 'reading' })
+const editWordForm = ref({ id: null, word: '', meaning: '', synonym: '' })
+
 const readingWrongCount = computed(() => wordBank.value.filter(w => w.reading_wrong_count > 0).length)
+const listeningWrongCount = computed(() => wordBank.value.filter(w => w.listening_wrong_count > 0).length)
+
+let availableVoices = []
+window.speechSynthesis.onvoiceschanged = () => {
+  availableVoices = window.speechSynthesis.getVoices().filter(v => v.lang.includes('en'))
+}
 
 const fetchWordsCount = async () => {
   const { data, error } = await supabase.from('words').select('*')
@@ -120,6 +244,94 @@ const fetchWordsCount = async () => {
   }
 }
 
+const speak = (text) => {
+  const utterance = new SpeechSynthesisUtterance(text)
+  utterance.lang = 'en-US'
+  window.speechSynthesis.speak(utterance)
+}
+
+const speakMixed = (text) => {
+  const utterance = new SpeechSynthesisUtterance(text)
+  utterance.lang = 'en-US'
+  if (availableVoices.length > 0) {
+    const randomVoice = availableVoices[Math.floor(Math.random() * availableVoices.length)]
+    utterance.voice = randomVoice
+  }
+  window.speechSynthesis.speak(utterance)
+}
+
+const confirmDelete = () => {
+  showConfirmDialog({ title: '确认删除', message: `确定要永久删除单词 "${currentQuestion.value.word}" 吗？` })
+    .then(async () => {
+      await supabase.from('words').delete().eq('id', currentQuestion.value.id)
+      showToast('删除成功！')
+      fetchWordsCount()
+      if (isPracticing.value) nextQuestion()
+      else if (isListeningVocab.value) nextDictation()
+      else if (isListeningIntensive.value) nextDictation(true)
+    }).catch(() => {})
+}
+
+const openEditDialog = () => {
+  editWordForm.value = { ...currentQuestion.value }
+  showEditDialog.value = true
+}
+
+const submitEditWord = async () => {
+  const { error } = await supabase.from('words').update({
+    word: editWordForm.value.word, 
+    meaning: editWordForm.value.meaning, 
+    synonym: editWordForm.value.synonym
+  }).eq('id', editWordForm.value.id)
+  
+  if (!error) {
+    showToast('修改成功')
+    Object.assign(currentQuestion.value, editWordForm.value)
+    fetchWordsCount()
+  } else {
+    showToast('修改失败')
+  }
+}
+
+const submitNewWord = async () => {
+  if (!newWordForm.value.word || !newWordForm.value.meaning) {
+    showToast('单词和释义为必填项！')
+    return
+  }
+  showLoadingToast({ message: '保存中...', forbidClick: true })
+  const { error } = await supabase.from('words').insert([{
+    word: newWordForm.value.word.trim(),
+    meaning: newWordForm.value.meaning.trim(),
+    synonym: newWordForm.value.synonym.trim(),
+    category: newWordForm.value.category.trim() || 'reading',
+    reading_wrong_count: 0,
+    listening_wrong_count: 0
+  }])
+  closeToast()
+  if (error) {
+    showToast('添加失败: ' + error.message)
+  } else {
+    showToast('添加成功！')
+    newWordForm.value = { word: '', meaning: '', synonym: '', category: 'reading' }
+    fetchWordsCount()
+  }
+}
+
+const handleFileUpload = (fileObj) => {
+  const file = fileObj.file
+  showLoadingToast({ message: '正在上传到云端...', forbidClick: true })
+  Papa.parse(file, {
+    header: true, skipEmptyLines: true,
+    complete: async (results) => {
+      const rows = results.data
+      const { error } = await supabase.from('words').insert(rows)
+      closeToast()
+      if (error) showToast('上传失败: ' + error.message)
+      else { showToast('上传成功！'); fetchWordsCount() }
+    }
+  })
+}
+
 const getRandomSingleWord = (str) => {
   if (!str) return ''
   const words = str.split(',').map(s => s.trim()).filter(Boolean)
@@ -127,66 +339,31 @@ const getRandomSingleWord = (str) => {
   return words[Math.floor(Math.random() * words.length)]
 }
 
-const updateWrongCount = async (wordId, newCount) => {
-  const { error } = await supabase
-    .from('words')
-    .update({ reading_wrong_count: newCount })
-    .eq('id', wordId)
-  
+const updateWrongCount = async (wordId, newCount, type = 'reading') => {
+  const field = type === 'reading' ? 'reading_wrong_count' : 'listening_wrong_count'
+  const { error } = await supabase.from('words').update({ [field]: newCount }).eq('id', wordId)
   if (!error) {
     const idx = wordBank.value.findIndex(w => w.id === wordId)
-    if (idx > -1) wordBank.value[idx].reading_wrong_count = newCount
+    if (idx > -1) wordBank.value[idx][field] = newCount
   }
 }
 
-const toggleFav = () => {
+const toggleFav = (type) => {
   const q = currentQuestion.value
-  const currentCount = q.reading_wrong_count || 0
+  const field = type === 'reading' ? 'reading_wrong_count' : 'listening_wrong_count'
+  const currentCount = q[field] || 0
   const newCount = currentCount > 0 ? 0 : 1 
-  q.reading_wrong_count = newCount
-  updateWrongCount(q.id, newCount)
-}
-
-const handleFileUpload = (fileObj) => {
-  const file = fileObj.file
-  showLoadingToast({ message: '正在上传到云端...', forbidClick: true })
-  
-  Papa.parse(file, {
-    header: true,
-    skipEmptyLines: true,
-    complete: async (results) => {
-      const rows = results.data
-      const { error } = await supabase.from('words').insert(rows)
-      
-      closeToast()
-      if (error) {
-        showToast('上传失败: ' + error.message)
-      } else {
-        showToast('上传成功！')
-        fetchWordsCount()
-      }
-    }
-  })
+  q[field] = newCount
+  updateWrongCount(q.id, newCount, type)
 }
 
 const startPractice = (mode) => {
   practiceMode.value = mode
   const pool = mode === 'reading_wrong' ? wordBank.value.filter(w => w.reading_wrong_count > 0) : wordBank.value
-  
-  if (pool.length < 4) {
-    showToast(`当前模式下的词库太少（需至少4个词）！`)
-    return
-  }
-  
+  if (pool.length < 4) { showToast(`当前模式下词库太少（需至少4个词）！`); return }
   isPracticing.value = true
   score.value = 0
   nextQuestion()
-}
-
-const speak = (text) => {
-  const utterance = new SpeechSynthesisUtterance(text)
-  utterance.lang = 'en-US'
-  window.speechSynthesis.speak(utterance)
 }
 
 const shuffleArray = (array) => {
@@ -200,23 +377,18 @@ const shuffleArray = (array) => {
 const nextQuestion = () => {
   hasAnswered.value = false
   selectedOption.value = null
-  
   const pool = practiceMode.value === 'reading_wrong' ? wordBank.value.filter(w => w.reading_wrong_count > 0) : wordBank.value
   const randomIndex = Math.floor(Math.random() * pool.length)
   const q = pool[randomIndex]
   currentQuestion.value = q
-  
   currentTargetSynonym.value = getRandomSingleWord(q.synonym)
-  let options = [currentTargetSynonym.value].filter(Boolean)
   
+  let options = [currentTargetSynonym.value].filter(Boolean)
   while (options.length < 4) {
     const randomFallback = wordBank.value[Math.floor(Math.random() * wordBank.value.length)]
     const fakeOption = Math.random() > 0.5 ? getRandomSingleWord(randomFallback.synonym) : getRandomSingleWord(randomFallback.antonym)
-    if (fakeOption && !options.includes(fakeOption)) {
-      options.push(fakeOption)
-    }
+    if (fakeOption && !options.includes(fakeOption)) options.push(fakeOption)
   }
-  
   currentOptions.value = shuffleArray(options)
   speak(q.word)
 }
@@ -225,24 +397,17 @@ const handleSelect = (option) => {
   selectedOption.value = option
   hasAnswered.value = true
   isCorrect.value = (option === currentTargetSynonym.value)
-  
-  if (isCorrect.value) {
-    score.value++
-  } else {
-    // 答错了自动增加阅读错题次数
+  if (isCorrect.value) { score.value++ } 
+  else {
     const currentCount = currentQuestion.value.reading_wrong_count || 0
     currentQuestion.value.reading_wrong_count = currentCount + 1
-    updateWrongCount(currentQuestion.value.id, currentCount + 1)
+    updateWrongCount(currentQuestion.value.id, currentCount + 1, 'reading')
   }
   speak(option)
 }
 
 const getOptionMeaning = (opt) => {
-  const found = wordBank.value.find(w => 
-    (w.synonym && w.synonym.includes(opt)) || 
-    (w.antonym && w.antonym.includes(opt)) || 
-    w.word === opt
-  )
+  const found = wordBank.value.find(w => (w.synonym && w.synonym.includes(opt)) || (w.antonym && w.antonym.includes(opt)) || w.word === opt)
   return found ? found.meaning : ''
 }
 
@@ -253,15 +418,79 @@ const getButtonType = (option) => {
   return 'default'
 }
 
+const startListeningVocab = (mode) => {
+  currentListeningPool = mode === 'wrong' ? wordBank.value.filter(w => w.listening_wrong_count > 0) : wordBank.value
+  if (currentListeningPool.length === 0) { showToast('该模式下没有单词'); return }
+  
+  isListeningVocab.value = true
+  dictationCount.value = 0
+  sessionWrongWords.value = []
+  sessionRightWords.value = []
+  nextDictation()
+}
+
+const nextDictation = (isIntensive = false) => {
+  hasAnswered.value = false
+  spellInput.value = ''
+  showIntensiveText.value = false
+  
+  const randomIndex = Math.floor(Math.random() * currentListeningPool.length)
+  currentQuestion.value = currentListeningPool[randomIndex]
+  
+  setTimeout(() => { speakMixed(currentQuestion.value.word) }, 300)
+}
+
+const checkDictation = () => {
+  if (!spellInput.value.trim()) { showToast('请输入拼写！'); return }
+  
+  hasAnswered.value = true
+  dictationCount.value++
+  
+  const userAns = spellInput.value.trim().toLowerCase()
+  const correctAns = currentQuestion.value.word.trim().toLowerCase()
+  
+  const validSynonyms = currentQuestion.value.synonym 
+    ? currentQuestion.value.synonym.toLowerCase().split(',').map(s=>s.trim()) 
+    : []
+  
+  isCorrect.value = (userAns === correctAns || validSynonyms.includes(userAns))
+  
+  if (isCorrect.value) {
+    sessionRightWords.value.push(currentQuestion.value)
+  } else {
+    sessionWrongWords.value.push(currentQuestion.value)
+    const currentCount = currentQuestion.value.listening_wrong_count || 0
+    currentQuestion.value.listening_wrong_count = currentCount + 1
+    updateWrongCount(currentQuestion.value.id, currentCount + 1, 'listening')
+  }
+}
+
+const finishDictation = () => {
+  isListeningVocab.value = false
+  showSummaryDialog.value = true
+}
+
+const startListeningIntensive = () => {
+  currentListeningPool = wordBank.value
+  isListeningIntensive.value = true
+  nextDictation(true)
+}
+
 onMounted(() => {
   fetchWordsCount()
+  window.speechSynthesis.getVoices()
 })
 </script>
 
 <style scoped>
-.app-container { min-height: 100vh; background-color: #f2f3f5; }
+.app-container { min-height: 100vh; background-color: #f2f3f5; padding-bottom: 20px;}
 .control-panel, .content { padding: 16px; }
-.score-board { display: flex; justify-content: space-between; margin-bottom: 20px; font-weight: bold; }
+.global-actions { background: white; padding: 15px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+.module-card { background: white; padding: 20px 16px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+.module-card h3 { margin: 0 0 10px 0; color: #333; font-size: 18px; }
+.module-desc { font-size: 13px; color: #888; margin-bottom: 15px; }
+
+.score-board { display: flex; justify-content: space-between; margin-bottom: 20px; font-weight: bold; background: white; padding: 12px 16px; border-radius: 8px;}
 .question-card { padding: 24px 16px; background: white; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
 .word-display { display: flex; justify-content: center; align-items: center; margin-bottom: 5px; }
 .word-display h2 { margin: 0; font-size: 28px; color: #333; }
