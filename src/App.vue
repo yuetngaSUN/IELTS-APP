@@ -1,8 +1,16 @@
+这个思路非常对！雅思备考中，阅读词汇（认得出同义词就行）和听力词汇（必须能盲听拼写）完全是两套不同的词库。如果混在一起，听力测试时考你一个极难的阅读词（比如 archaeological），或者阅读选择里出现极其简单的听力词（比如 apple），体验就很糟糕。
+
+我们在前几步已经在 Supabase 数据库里保留了 category 字段 。所以实现“词书分离”非常简单。
+
+我为你纯添加了词库分离逻辑（阅读只抽 category='reading'，听力只抽 category='listening'），核心代码、排版布局 100% 保持不变。
+
+请再次替换 src/App.vue：
+
+xml
 <template>
   <div class="app-container">
     <van-nav-bar title="雅思云端特训" style="background-color: #f7f8fa;" />
 
-    <!-- 主控面板 -->
     <div class="control-panel" v-if="!isPracticing && !isListeningVocab && !isListeningIntensive">
       <van-notice-bar left-icon="info-o" :text="'当前云端词库共有 ' + totalWordsInDB + ' 个单词'" />
       
@@ -17,8 +25,9 @@
 
       <div class="module-card">
         <h3>📖 阅读：同义词替换</h3>
-        <van-button type="success" block round @click="startPractice('all')" :disabled="totalWordsInDB === 0">
-          开始刷题！(全部)
+        <!-- 【纯添加】：按钮显示专门的阅读词库数量 -->
+        <van-button type="success" block round @click="startPractice('all')" :disabled="readingWordCount === 0">
+          开始刷题！(共 {{ readingWordCount }} 词)
         </van-button>
         <van-button type="warning" block round style="margin-top: 15px;" @click="startPractice('reading_wrong')" :disabled="readingWrongCount === 0">
           复习阅读错题本 ({{ readingWrongCount }}个)
@@ -28,8 +37,9 @@
       <div class="module-card">
         <h3>🎧 听力：生词听写测试</h3>
         <p class="module-desc">盲听单词拼写，男女声混合，做完生成汇总表</p>
-        <van-button type="primary" block round @click="startListeningVocab('all')" :disabled="totalWordsInDB === 0">
-          开始听写测试 (全部词库)
+        <!-- 【纯添加】：按钮显示专门的听力词库数量 -->
+        <van-button type="primary" block round @click="startListeningVocab('all')" :disabled="listeningWordCount === 0">
+          开始听写测试 (共 {{ listeningWordCount }} 词)
         </van-button>
         <van-button type="danger" plain block round style="margin-top: 15px;" @click="startListeningVocab('wrong')" :disabled="listeningWrongCount === 0">
           攻克听力错题本 ({{ listeningWrongCount }}个)
@@ -39,7 +49,7 @@
       <div class="module-card">
         <h3>👂 听力：词汇精听</h3>
         <p class="module-desc">随机男女声朗读，辅助记忆原词与释义</p>
-        <van-button color="#7232dd" block round @click="startListeningIntensive" :disabled="totalWordsInDB === 0">
+        <van-button color="#7232dd" block round @click="startListeningIntensive" :disabled="listeningWordCount === 0">
           进入精听模式
         </van-button>
       </div>
@@ -79,12 +89,9 @@
 
       <div v-if="hasAnswered" class="action-area">
         <van-notice-bar :text="isCorrect ? '回答正确！🎉' : '回答错误。正确近义词是: ' + currentTargetSynonym" :color="isCorrect ? '#07c160' : '#ee0a24'" :background="isCorrect ? '#e8fbec' : '#ffe1e1'" style="margin-bottom: 15px; border-radius: 8px;" />
-        
-        <!-- 【纯添加】：作答后，展示该词完整的同义词库，方便一网打尽 -->
         <p style="text-align: center; color: #7232dd; font-size: 14px; margin-bottom: 15px; font-weight: bold;" v-if="currentQuestion.synonym">
           💡 该词的全部同义词: {{ currentQuestion.synonym }}
         </p>
-
         <van-button type="primary" block round @click="nextQuestion">下一题</van-button>
       </div>
     </div>
@@ -115,12 +122,9 @@
         <div v-if="hasAnswered" style="margin-top: 20px;">
           <van-notice-bar :text="isCorrect ? '拼写正确！🎉' : '拼写错误。正确拼写是: ' + currentQuestion.word" :color="isCorrect ? '#07c160' : '#ee0a24'" :background="isCorrect ? '#e8fbec' : '#ffe1e1'" style="margin-bottom: 15px; border-radius: 8px;" />
           <p style="text-align: center; color: #666; margin-bottom: 10px;">释义: {{ currentQuestion.meaning }}</p>
-          
-          <!-- 【纯添加】：听写作答后，也展示同义词/变体 -->
           <p style="text-align: center; color: #7232dd; font-size: 13px; margin-bottom: 15px;" v-if="currentQuestion.synonym">
             💡 听写容错备用词: {{ currentQuestion.synonym }}
           </p>
-
           <van-button type="primary" block round @click="nextDictation">下一题</van-button>
         </div>
       </van-cell-group>
@@ -147,7 +151,6 @@
           <div v-if="showIntensiveText" style="text-align: center;">
             <h2 style="margin: 10px 0;">{{ currentQuestion.word }}</h2>
             <p style="color: #666;">{{ currentQuestion.meaning }}</p>
-            <!-- 【纯添加】：精听模式显示单词时，一并显示同义词 -->
             <p style="color: #7232dd; font-size: 14px;" v-if="currentQuestion.synonym">同义词: {{ currentQuestion.synonym }}</p>
           </div>
           
@@ -161,18 +164,27 @@
       </van-cell-group>
     </div>
 
-    <!-- 弹窗部分保持不变 -->
+    <!-- 弹窗部分 -->
     <van-dialog v-model:show="showAddDialog" title="手动添加生词" show-cancel-button @confirm="submitNewWord">
       <van-field v-model="newWordForm.word" label="单词" placeholder="必填" required />
       <van-field v-model="newWordForm.meaning" label="中文释义" placeholder="必填" required />
       <van-field v-model="newWordForm.synonym" label="同义词" placeholder="多个用英文逗号分隔" />
-      <van-field v-model="newWordForm.category" label="分类" placeholder="如 reading 或 listening" />
+      <!-- 【纯添加】：让用户必须选择这个词属于阅读还是听力 -->
+      <van-radio-group v-model="newWordForm.category" direction="horizontal" style="padding: 10px 16px;">
+        <van-radio name="reading">阅读词</van-radio>
+        <van-radio name="listening">听力词</van-radio>
+      </van-radio-group>
     </van-dialog>
 
     <van-dialog v-model:show="showEditDialog" title="修改单词" show-cancel-button @confirm="submitEditWord">
       <van-field v-model="editWordForm.word" label="单词" required />
       <van-field v-model="editWordForm.meaning" label="中文释义" required />
-      <van-field v-model="editWordForm.synonym" label="同义词" placeholder="可填入复数/变体作容错，逗号分隔" />
+      <van-field v-model="editWordForm.synonym" label="同义词" placeholder="可填入复数/变体作容错" />
+      <!-- 【纯添加】：修改时也可以更改分类 -->
+      <van-radio-group v-model="editWordForm.category" direction="horizontal" style="padding: 10px 16px;">
+        <van-radio name="reading">阅读词</van-radio>
+        <van-radio name="listening">听力词</van-radio>
+      </van-radio-group>
     </van-dialog>
 
     <van-dialog v-model:show="showSummaryDialog" title="本次听写汇总" confirm-button-text="我知道了">
@@ -226,10 +238,18 @@ const showIntensiveText = ref(false)
 let currentListeningPool = []
 
 const newWordForm = ref({ word: '', meaning: '', synonym: '', category: 'reading' })
-const editWordForm = ref({ id: null, word: '', meaning: '', synonym: '' })
+const editWordForm = ref({ id: null, word: '', meaning: '', synonym: '', category: 'reading' })
 
-const readingWrongCount = computed(() => wordBank.value.filter(w => w.reading_wrong_count > 0).length)
-const listeningWrongCount = computed(() => wordBank.value.filter(w => w.listening_wrong_count > 0).length)
+// 【纯添加】：智能分离阅读库和听力库
+const readingWords = computed(() => wordBank.value.filter(w => w.category === 'reading'))
+const listeningWords = computed(() => wordBank.value.filter(w => w.category === 'listening'))
+
+const readingWordCount = computed(() => readingWords.value.length)
+const listeningWordCount = computed(() => listeningWords.value.length)
+
+// 错题本也各自基于自己专属的分类库计算
+const readingWrongCount = computed(() => readingWords.value.filter(w => w.reading_wrong_count > 0).length)
+const listeningWrongCount = computed(() => listeningWords.value.filter(w => w.listening_wrong_count > 0).length)
 
 let availableVoices = []
 window.speechSynthesis.onvoiceschanged = () => {
@@ -274,6 +294,7 @@ const confirmDelete = () => {
 
 const openEditDialog = () => {
   editWordForm.value = { ...currentQuestion.value }
+  if (!editWordForm.value.category) editWordForm.value.category = 'reading'
   showEditDialog.value = true
 }
 
@@ -281,7 +302,8 @@ const submitEditWord = async () => {
   const { error } = await supabase.from('words').update({
     word: editWordForm.value.word, 
     meaning: editWordForm.value.meaning, 
-    synonym: editWordForm.value.synonym
+    synonym: editWordForm.value.synonym,
+    category: editWordForm.value.category
   }).eq('id', editWordForm.value.id)
   
   if (!error) {
@@ -303,7 +325,7 @@ const submitNewWord = async () => {
     word: newWordForm.value.word.trim(),
     meaning: newWordForm.value.meaning.trim(),
     synonym: newWordForm.value.synonym.trim(),
-    category: newWordForm.value.category.trim() || 'reading',
+    category: newWordForm.value.category,
     reading_wrong_count: 0,
     listening_wrong_count: 0
   }])
@@ -323,7 +345,11 @@ const handleFileUpload = (fileObj) => {
   Papa.parse(file, {
     header: true, skipEmptyLines: true,
     complete: async (results) => {
-      const rows = results.data
+      // 批量上传如果没有指定 category，默认设为 reading
+      const rows = results.data.map(row => ({
+        ...row,
+        category: row.category || 'reading'
+      }))
       const { error } = await supabase.from('words').insert(rows)
       closeToast()
       if (error) showToast('上传失败: ' + error.message)
@@ -359,8 +385,9 @@ const toggleFav = (type) => {
 
 const startPractice = (mode) => {
   practiceMode.value = mode
-  const pool = mode === 'reading_wrong' ? wordBank.value.filter(w => w.reading_wrong_count > 0) : wordBank.value
-  if (pool.length < 4) { showToast(`当前模式下词库太少（需至少4个词）！`); return }
+  // 【纯添加】：阅读模式只从 readingWords 里抽题
+  const pool = mode === 'reading_wrong' ? readingWords.value.filter(w => w.reading_wrong_count > 0) : readingWords.value
+  if (pool.length < 4) { showToast(`当前模式下阅读词库太少（需至少4个词）！`); return }
   isPracticing.value = true
   score.value = 0
   nextQuestion()
@@ -377,7 +404,8 @@ const shuffleArray = (array) => {
 const nextQuestion = () => {
   hasAnswered.value = false
   selectedOption.value = null
-  const pool = practiceMode.value === 'reading_wrong' ? wordBank.value.filter(w => w.reading_wrong_count > 0) : wordBank.value
+  // 【纯添加】：阅读模式只从 readingWords 里抽题
+  const pool = practiceMode.value === 'reading_wrong' ? readingWords.value.filter(w => w.reading_wrong_count > 0) : readingWords.value
   const randomIndex = Math.floor(Math.random() * pool.length)
   const q = pool[randomIndex]
   currentQuestion.value = q
@@ -385,7 +413,8 @@ const nextQuestion = () => {
   
   let options = [currentTargetSynonym.value].filter(Boolean)
   while (options.length < 4) {
-    const randomFallback = wordBank.value[Math.floor(Math.random() * wordBank.value.length)]
+    // 【纯添加】：假选项也只从 readingWords 里抽
+    const randomFallback = readingWords.value[Math.floor(Math.random() * readingWords.value.length)]
     const fakeOption = Math.random() > 0.5 ? getRandomSingleWord(randomFallback.synonym) : getRandomSingleWord(randomFallback.antonym)
     if (fakeOption && !options.includes(fakeOption)) options.push(fakeOption)
   }
@@ -419,8 +448,9 @@ const getButtonType = (option) => {
 }
 
 const startListeningVocab = (mode) => {
-  currentListeningPool = mode === 'wrong' ? wordBank.value.filter(w => w.listening_wrong_count > 0) : wordBank.value
-  if (currentListeningPool.length === 0) { showToast('该模式下没有单词'); return }
+  // 【纯添加】：听力听写只从 listeningWords 里抽题
+  currentListeningPool = mode === 'wrong' ? listeningWords.value.filter(w => w.listening_wrong_count > 0) : listeningWords.value
+  if (currentListeningPool.length === 0) { showToast('该模式下没有听力单词'); return }
   
   isListeningVocab.value = true
   dictationCount.value = 0
@@ -471,7 +501,9 @@ const finishDictation = () => {
 }
 
 const startListeningIntensive = () => {
-  currentListeningPool = wordBank.value
+  // 【纯添加】：听力精听只从 listeningWords 里抽题
+  currentListeningPool = listeningWords.value
+  if (currentListeningPool.length === 0) { showToast('当前没有听力单词'); return }
   isListeningIntensive.value = true
   nextDictation(true)
 }
