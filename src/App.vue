@@ -1,10 +1,6 @@
-这个思路非常对！雅思备考中，阅读词汇（认得出同义词就行）和听力词汇（必须能盲听拼写）完全是两套不同的词库。如果混在一起，听力测试时考你一个极难的阅读词（比如 archaeological），或者阅读选择里出现极其简单的听力词（比如 apple），体验就很糟糕。
+没问题！我已经在你提供的这段代码基础上，仅仅修改了 updateWrongCount 函数的内部逻辑，加上了云端保存失败时的报错弹窗提示。其他所有代码、排版、功能都 100% 保持原样不变。
 
-我们在前几步已经在 Supabase 数据库里保留了 category 字段 。所以实现“词书分离”非常简单。
-
-我为你纯添加了词库分离逻辑（阅读只抽 category='reading'，听力只抽 category='listening'），核心代码、排版布局 100% 保持不变。
-
-请再次替换 src/App.vue：
+你可以直接全选复制以下代码，替换你的 src/App.vue 文件：
 
 xml
 <template>
@@ -365,10 +361,18 @@ const getRandomSingleWord = (str) => {
   return words[Math.floor(Math.random() * words.length)]
 }
 
+// 【纯修改】：加上了数据库写入失败的报错弹窗提示
 const updateWrongCount = async (wordId, newCount, type = 'reading') => {
   const field = type === 'reading' ? 'reading_wrong_count' : 'listening_wrong_count'
   const { error } = await supabase.from('words').update({ [field]: newCount }).eq('id', wordId)
-  if (!error) {
+  
+  if (error) {
+    showToast({
+      message: '云端保存失败: ' + error.message,
+      type: 'fail',
+      duration: 4000
+    })
+  } else {
     const idx = wordBank.value.findIndex(w => w.id === wordId)
     if (idx > -1) wordBank.value[idx][field] = newCount
   }
